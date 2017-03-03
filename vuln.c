@@ -151,7 +151,6 @@ int main_loop(unsigned seed) {
 }
 
 int main(int argc, char *argv[]) {
-
    unsigned seed=GRP;
 
    if (argc >= 2) seed = atoi(argv[1]);
