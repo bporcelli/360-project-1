@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
    void *ownme_addr = (void*) 0x804b1dd; // address of own_me
    void *mainloop_ra_loc = (void*) 0xbf8c2dec; // location where RA for main_loop saved
 
-   // Relative distances between objects will be preserved
+   // Relative distances between objects (preserved across multiple runs)
    unsigned mainloop_bp_ra_diff = mainloop_bp - mainloop_ra_loc;
    unsigned mainloop_ownme_diff = ownme_addr - mainloop_ra;
 
@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
 
    usleep(100000);
    get_formatted("%*s");
-   
+
    kill(pid, SIGINT);
    int status;
    wait(&status);
