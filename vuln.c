@@ -85,8 +85,8 @@ int main_loop(unsigned seed) {
 
    srandom(seed);
    unsigned s = (unsigned)random();
-   s = s % LEN1;
-   char *rdbuf = (char*)alloca(s+LEN1);
+   s = LEN1 + (s % LEN1);
+   char *rdbuf = (char*)alloca(s);
    char *tbuf;
    unsigned tbufsz = ((unsigned)random()) % LEN1;
    tbuf = (char*)alloca(tbufsz);
