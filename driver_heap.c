@@ -216,13 +216,11 @@ int main(int argc, char* argv[]) {
    // Login, then quit to trigger call to ownme
    put_str("l\n");
    send();
-   usleep(100000);
    
    put_str("q\n");
    send();
 
    usleep(100000);
-   get_formatted("%*s");
 
    kill(pid, SIGINT);
    int status;

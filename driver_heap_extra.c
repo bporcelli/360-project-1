@@ -255,7 +255,6 @@ int main(int argc, char* argv[]) {
    send();
 
    usleep(100000);
-   get_formatted("%*s");
 
    kill(pid, SIGINT);
    int status;
