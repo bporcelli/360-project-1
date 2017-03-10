@@ -1,7 +1,7 @@
 CFLAGS=-g -Wall -m32 -DGRP=$(GRP_ID) -DLEN1=1021 -DLEN2=256 -DLEN3=1000 -DRANDOM=0
 #CFLAGS=-g -Wall -DLEN1=1021 -DLEN2=256 -DLEN3=1000 -DRANDOM=random\(\)
 
-all: vuln.s vuln driver driver_authd_expl driver_smash_data driver_heap driver_heap_extra driver_string
+all: vuln.s vuln driver driver_authd_expl driver_smash_data driver_smash_libc driver_heap driver_heap_extra driver_string
 
 vuln: vuln.o my_malloc.o
 	gcc $(CFLAGS) -o vuln vuln.o my_malloc.o
@@ -26,6 +26,9 @@ driver_authd_expl: driver_authd_expl.c
 driver_smash_data: driver_smash_data.c
 	gcc $(CFLAGS) -o driver_smash_data driver_smash_data.c
 
+driver_smash_libc: driver_smash_libc.c
+	gcc $(CFLAGS) -o driver_smash_libc driver_smash_libc.c
+
 driver_heap: driver_heap.c
 	gcc $(CFLAGS) -o driver_heap driver_heap.c
 
@@ -35,8 +38,11 @@ driver_heap_extra: driver_heap_extra.c
 driver_string: driver_string.c
 	gcc $(CFLAGS) -o driver_string driver_string.c
 
+driver_string: driver_string.c
+	gcc $(CFLAGS) -o driver_string driver_string.c
+
 padding.h:
 	./mkpad $(GRP_ID)
 
 clean:
-	rm -f vuln vuln.o my_malloc.o vuln.s padding.h driver_authd_expl driver driver_smash_data driver_heap driver_heap_extra driver_string
+	rm -f vuln vuln.o my_malloc.o vuln.s padding.h driver_authd_expl driver driver_smash_data driver_smash_libc driver_heap driver_heap_extra driver_string
