@@ -38,9 +38,6 @@ driver_heap_extra: driver_heap_extra.c
 driver_string: driver_string.c
 	gcc $(CFLAGS) -o driver_string driver_string.c
 
-driver_string: driver_string.c
-	gcc $(CFLAGS) -o driver_string driver_string.c
-
 padding.h:
 	./mkpad $(GRP_ID)
 
